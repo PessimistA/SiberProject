@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # 1. MONİTÖR (İzole Ağda)
+  monitor:
+    build: ./monitor
+    container_name: shadow_monitor
+    volumes:
+      - ./monitor:/app
+      - ./honeypot_data/data:/app/data
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+    networks:
+      - shadow_net
+
+  # 2. HONEYPOT (İzole Ağda - DIŞARI ÇIKIŞI TAMAMEN YASAKLANDI)
+  honeypot:
+    build: ./honeypot
+    container_name: shadow_honeypot
+    volumes:
+      - ./honeypot:/app
+      - ./honeypot_data/data:/app/data
+      - ./honeypot_data/quarantine:/app/quarantine
+      
+      # YENİ KANCA: Güvenli Dosya Bırakma Alanı (Dropzone)
+      # Sonundaki ':ro' (Read-Only) parametresi, Docker'ın bu klasöre sadece okuma 
+      # yetkisiyle erişmesini sağlar. İçeriden host makineye dosya yazılamaz!
+      - ./payload_dropzone:/app/dropzone:ro
+      
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+    networks:
+      - shadow_net
+    depends_on:
+      - ai_koprusu
+
+  # 3. SALDIRGAN (İzole Ağda)
+  attacker:
+    build: ./attacker
+    container_name: shadow_attacker
+    volumes:
+      - ./attacker:/app
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+    networks:
+      - shadow_net
+
+  # 4. FLASK AI KÖPRÜSÜ (Çift Bacaklı DMZ)
+  ai_koprusu:
+    build: ./ai_koprusu
+    container_name: shadow_ai_koprusu
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - shadow_net  
+      - ai_bridge   
+
+networks:
+  shadow_net:
+    internal: true  
+  ai_bridge:
+    driver: bridge
