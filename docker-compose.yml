@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # 1. MONİTÖR (İzole Ağda)
+  # 1. MONİTÖR (İzole Ağda)
+  monitor:
+    build: ./monitor  
+    container_name: shadow_monitor
+    volumes:
+      - ./monitor:/app
+      # YENİ: Honeypot'un oluşturduğu verileri Monitor'ün de okuyabilmesi için ortak bağlama
+      - ./honeypot_data/data:/app/data
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+    networks:
+      - shadow_net
+
+  # 2. HONEYPOT (İzole Ağda - DIŞARI ÇIKIŞI TAMAMEN YASAKLANDI)
+  honeypot:
+    build: ./honeypot
+    container_name: shadow_honeypot
+    volumes:
+      - ./honeypot:/app
+      # YENİ: Logların ve karantinanın silinmemesi için host makineye bağlandı
+      - ./honeypot_data/data:/app/data
+      - ./honeypot_data/quarantine:/app/quarantine
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+    networks:
+      - shadow_net
+    depends_on:
+      - ai_koprusu
+
+  # 3. SALDIRGAN (İzole Ağda)
+  attacker:
+    build: ./attacker
+    container_name: shadow_attacker
+    volumes:
+      - ./attacker:/app
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    environment:
+      - DISPLAY=${DISPLAY}
+    networks:
+      - shadow_net
+
+  # 4. FLASK AI KÖPRÜSÜ (Çift Bacaklı DMZ)
+  ai_koprusu:
+    build: ./ai_koprusu
+    container_name: shadow_ai_koprusu
+    extra_hosts:
+      # Sadece köprünün LM Studio'ya (Ana Makineye) ulaşma izni var
+      - "host.docker.internal:host-gateway"
+    networks:
+      - shadow_net  # Honeypot'tan gelen istekleri dinler
+      - ai_bridge   # Host makineye iletir
+
+networks:
+  shadow_net:
+    internal: true  # DİKKAT: Honeypot, Monitor ve Attacker buradan dışarı çıkamaz!
+  ai_bridge:
+    driver: bridge  # Sadece ai_koprusu'nun dışarıya (LM Studio'ya) uzanması içindir.
